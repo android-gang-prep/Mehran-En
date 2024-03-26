@@ -5,6 +5,7 @@ import static android.view.MotionEvent.ACTION_UP;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Bundle;
@@ -55,6 +56,11 @@ public class BActivity extends AppCompatActivity implements ProgressView.OnFinis
 
         });
 
+        binding.send.setOnClickListener(v -> {
+            Intent intent = new Intent(BActivity.this, CActivity.class);
+            intent.putExtra("path", file_path);
+            startActivity(intent);
+        });
     }
 
 
@@ -71,6 +77,8 @@ public class BActivity extends AppCompatActivity implements ProgressView.OnFinis
 
     MediaRecorder mediaRecorder;
 
+    private String file_path;
+
     private void startRecord() throws IOException {
 
 
@@ -81,7 +89,7 @@ public class BActivity extends AppCompatActivity implements ProgressView.OnFinis
             folder.mkdirs();
 
         File path = new File(folder, System.currentTimeMillis() + ".3gp");
-
+        file_path = path.getPath();
         mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
         mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);

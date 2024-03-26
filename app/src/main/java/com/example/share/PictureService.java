@@ -165,7 +165,6 @@ public class PictureService {
             return;
         }
 
-
         try {
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraDevice.getId());
             Size[] jpegSizes = null;

@@ -1,6 +1,8 @@
 package com.example.share;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.widget.Toast;
 
@@ -12,6 +14,11 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.example.share.databinding.CActivityBinding;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.WriterException;
+import com.google.zxing.common.BitMatrix;
+import com.journeyapps.barcodescanner.BarcodeEncoder;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
@@ -24,9 +31,6 @@ import java.util.UUID;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
-
-import androidmads.library.qrgenearator.QRGContents;
-import androidmads.library.qrgenearator.QRGEncoder;
 
 
 public class CActivity extends AppCompatActivity {
@@ -48,16 +52,25 @@ public class CActivity extends AppCompatActivity {
         String path = getIntent().getStringExtra("path");
 
         String key = getRandomKey();
-        QRGEncoder qrgEncoder = new QRGEncoder(key, null, QRGContents.Type.TEXT, 1000);
 
-        binding.img.setImageBitmap(qrgEncoder.getBitmap());
-
+        MultiFormatWriter multiFormatWriter = new MultiFormatWriter();
         try {
-            byte[] data = EncryptFile(path, key);
-        } catch (IOException e) {
-            finish();
-            Toast.makeText(this, "Error", Toast.LENGTH_SHORT).show();
+            BitMatrix result = multiFormatWriter.encode(key, BarcodeFormat.QR_CODE, 600, 600);
+            BarcodeEncoder barcodeEncoder = new BarcodeEncoder();
+            Bitmap bitmap = barcodeEncoder.createBitmap(result);
+            binding.img.setImageBitmap(bitmap);
+        } catch (WriterException e) {
+            e.printStackTrace();
         }
+
+        binding.next.setOnClickListener(v -> {
+            Intent intent = new Intent(CActivity.this, DActivity.class);
+            intent.putExtra("path",path);
+            intent.putExtra("key",key);
+            startActivity(intent);
+        });
+
+
     }
 
 
@@ -70,27 +83,6 @@ public class CActivity extends AppCompatActivity {
         return sb.toString();
     }
 
-    private byte[] EncryptFile(String path, String key) throws IOException {
-        File file = new File(path);
-        int size = (int) file.length();
-        byte[] bytes = new byte[size];
-        BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
-        bufferedInputStream.read(bytes, 0, bytes.length);
-        bufferedInputStream.close();
-        return encode(bytes, key);
-    }
 
-
-    private byte[] encode(byte[] data, String key) {
-        try {
-            SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES");
-            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(Cipher.ENCRYPT_MODE, keySpec);
-            return cipher.doFinal(data);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
 
 }

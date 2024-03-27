@@ -22,6 +22,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.share.databinding.ActivityMainBinding;
 import com.example.share.databinding.BActivityBinding;
+import com.google.zxing.integration.android.IntentIntegrator;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,7 +45,6 @@ public class BActivity extends AppCompatActivity implements ProgressView.OnFinis
         setContentView(binding.getRoot());
 
         binding.progressView.setOnTouchListener((v, event) -> {
-            Log.i("TAG", "onCreate: " + event.getAction());
             if (event.getAction() == ACTION_DOWN) {
                 req.launch(Manifest.permission.RECORD_AUDIO);
             } else if (event.getAction() == ACTION_UP) {
@@ -61,7 +61,28 @@ public class BActivity extends AppCompatActivity implements ProgressView.OnFinis
             intent.putExtra("path", file_path);
             startActivity(intent);
         });
+
+        binding.imageView.setOnClickListener(v -> scanQrCode());
     }
+
+    private void scanQrCode() {
+
+        IntentIntegrator integrator = new IntentIntegrator(this);
+        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+        integrator.setOrientationLocked(false);
+        integrator.setPrompt("Scan a QR code");
+        scan.launch(integrator.createScanIntent());
+
+    }
+
+    ActivityResultLauncher<Intent> scan = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), o -> {
+        if (o.getResultCode() == RESULT_OK) {
+            String contents = o.getData().getStringExtra("SCAN_RESULT");
+            Log.i("TAG", "scanQrCode: " + contents);
+        }
+
+    });
+
 
 
     ActivityResultLauncher<String> req = registerForActivityResult(new ActivityResultContracts.RequestPermission(), o -> {

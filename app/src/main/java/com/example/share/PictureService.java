@@ -5,9 +5,13 @@ import static android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT;
 import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -19,10 +23,12 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.media.Image;
 import android.media.ImageReader;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -220,9 +226,9 @@ public class PictureService {
     }
 
     private void saveImageToDisk(final byte[] bytes) {
-
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         final File file = new File(DirectoryName
-                + File.separator + System.currentTimeMillis() + "_pic.jpg");
+                + File.separator + timeStamp + "_pic.jpg");
 
         OutputStream output = null;
         try {
@@ -243,7 +249,47 @@ public class PictureService {
             }
         } catch (Exception e) {
         }
-
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+            intent.setData(Uri.parse("file://" + file.getAbsolutePath()));
+            context.sendBroadcast(intent);
+        } else {
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, file.getName());
+            contentValues.put(MediaStore.Images.Media.MIME_TYPE, "image/*");
+            Uri contentUri;
+            if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+                contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+            } else {
+                contentUri = MediaStore.Images.Media.INTERNAL_CONTENT_URI;
+            }
+            contentValues.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
+            contentValues.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = context.getContentResolver().insert(contentUri, contentValues);
+            OutputStream os = null;
+            try {
+                Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
+                os = context.getContentResolver().openOutputStream(uri);
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, os);
+                contentValues.clear();
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                context.getContentResolver().update(uri, contentValues, null, null);
+            } catch (Exception e) {
+                context.getContentResolver().delete(uri, null, null);
+                e.printStackTrace();
+            } finally {
+                try {
+                    if (os != null) {
+                        os.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+            mediaScanIntent.setData(contentUri);
+            context.sendBroadcast(mediaScanIntent);
+        }
     }
 
     public String getVersion() {

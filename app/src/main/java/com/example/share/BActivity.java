@@ -78,7 +78,9 @@ public class BActivity extends AppCompatActivity implements ProgressView.OnFinis
     ActivityResultLauncher<Intent> scan = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), o -> {
         if (o.getResultCode() == RESULT_OK) {
             String contents = o.getData().getStringExtra("SCAN_RESULT");
-            Log.i("TAG", "scanQrCode: " + contents);
+            Intent intent = new Intent(BActivity.this, FActivity.class);
+            intent.putExtra("key",contents);
+            startActivity(intent);
         }
 
     });

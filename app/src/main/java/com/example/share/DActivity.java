@@ -18,6 +18,7 @@ import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.Toast;
 
+import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
@@ -54,6 +55,7 @@ public class DActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
         binding = DActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         ViewCompat.setOnApplyWindowInsetsListener(binding.main, (v, insets) -> {
@@ -66,16 +68,16 @@ public class DActivity extends AppCompatActivity {
         arrayAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1);
 
         binding.rec.setAdapter(arrayAdapter);
-
         String path = getIntent().getStringExtra("path");
 
         String key = getIntent().getStringExtra("key");
-        try {
-            byte[] data = EncryptFile(path, key);
-        } catch (IOException e) {
-            finish();
-            Toast.makeText(this, "Error", Toast.LENGTH_SHORT).show();
-        }
+        binding.rec.setOnItemClickListener((parent, view, position, id) -> {
+            Intent intent = new Intent(DActivity.this, EActivity.class);
+            intent.putExtra("path",path);
+            intent.putExtra("key",key);
+            intent.putExtra("device",arrayAdapter.getItem(position).split("\n")[1].trim());
+            startActivity(intent);
+        });
 
     }
 
@@ -109,7 +111,7 @@ public class DActivity extends AppCompatActivity {
                 .setCancelable(false)
                 .setPositiveButton("Yes", (dialog, id) -> startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
                 .setNegativeButton("No", (dialog, id) -> finish());
-         builder.show();
+        builder.show();
     }
 
     ActivityResultLauncher<String[]> rqPer = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), o -> {
@@ -179,7 +181,7 @@ public class DActivity extends AppCompatActivity {
         }
 
         if (device.getName() != null && !device.getName().isEmpty()) {
-            arrayAdapter.add(device.getName() + " : " + device.getAddress());
+            arrayAdapter.add(device.getName() + " \n " + device.getAddress());
         }
         arrayAdapter.notifyDataSetChanged();
 
@@ -206,29 +208,6 @@ public class DActivity extends AppCompatActivity {
                     Manifest.permission.BLUETOOTH_ADMIN,
                     Manifest.permission.ACCESS_FINE_LOCATION});
 
-        }
-    }
-
-    private byte[] EncryptFile(String path, String key) throws IOException {
-        File file = new File(path);
-        int size = (int) file.length();
-        byte[] bytes = new byte[size];
-        BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
-        bufferedInputStream.read(bytes, 0, bytes.length);
-        bufferedInputStream.close();
-        return encode(bytes, key);
-    }
-
-
-    private byte[] encode(byte[] data, String key) {
-        try {
-            SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES");
-            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(Cipher.ENCRYPT_MODE, keySpec);
-            return cipher.doFinal(data);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
         }
     }
 

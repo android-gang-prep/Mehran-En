@@ -1,42 +1,59 @@
 package com.example.share;
 
+import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.media.MediaPlayer;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
 import android.util.Log;
+import android.view.View;
+import android.widget.MediaController;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.example.share.databinding.DActivityBinding;
 import com.example.share.databinding.EActivityBinding;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 
-public class EActivity extends AppCompatActivity {
+public class FActivity extends AppCompatActivity {
     EActivityBinding binding;
 
-    ExecutorService executorService = Executors.newSingleThreadExecutor();
     String device;
     BluetoothAdapter bluetoothAdapter;
     String path;
@@ -56,59 +73,124 @@ public class EActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        path = getIntent().getStringExtra("path");
 
         key = getIntent().getStringExtra("key");
-        device = getIntent().getStringExtra("device");
 
+        DISCOVERABLE = false;
 
-        client();
-
+        binding.play.setOnClickListener(v -> play(f));
     }
 
-    private void client() {
-        executorService.submit(() -> {
-            UUID serialUUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-            BluetoothAdapter.getDefaultAdapter().cancelDiscovery();
-            Log.i("TAG", "client: "+device);
-            BluetoothDevice btDevice = bluetoothAdapter.getRemoteDevice(device); // Get the BTAddress after scan
-            try {
-                BluetoothSocket btSocket = btDevice.createRfcommSocketToServiceRecord(serialUUID);
-                btSocket.connect();
-                OutputStream oStream = btSocket.getOutputStream();
-                byte[] data = EncryptFile(path, key);
-                ByteArrayInputStream bufferedInputStream = new ByteArrayInputStream(data);
-                byte[] bytes = new byte[1024];
-                int len;
-                while ((len = bufferedInputStream.read(bytes)) != -1) {
-                    oStream.write(bytes, 0, len);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+
+    ActivityResultLauncher<Intent> reqBlue = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), o -> {
+        if (o.getResultCode() == RESULT_OK) {
+            server();
+            return;
+        }
+        finish();
+    });
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        checkBluetooth();
+    }
+
+    public void locationCheck() {
+        final LocationManager manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            buildAlertMessageNoGps();
+        }
+    }
+
+    private void buildAlertMessageNoGps() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("enable your GPS")
+                .setCancelable(false)
+                .setPositiveButton("Yes", (dialog, id) -> startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                .setNegativeButton("No", (dialog, id) -> finish());
+        builder.show();
+    }
+
+    ActivityResultLauncher<String[]> rqPer = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), o -> {
+        for (Map.Entry<String, Boolean> stringBooleanEntry : o.entrySet()) {
+            if (!stringBooleanEntry.getValue())
+                return;
+        }
+
+        if (!bluetoothAdapter.isEnabled())
+            if (!bluetoothAdapter.enable()) {
+                reqBlue.launch(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));
+                return;
             }
-        });
+
+
+        server();
+
+
+    });
+
+
+    File f;
+
+    boolean DISCOVERABLE = false;
+    ActivityResultLauncher<Intent> reqDISCOVERABLE = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), o -> {
+        if (o.getResultCode() == 300) {
+            DISCOVERABLE = true;
+        }
+    });
+
+    private void server() {
+
+        locationCheck();
+        File file = new File(Environment.getExternalStorageDirectory(), "Pictures");
+        if (!file.exists())
+            file.mkdirs();
+        f = new File(file, System.currentTimeMillis() + ".3gp");
+        Intent intent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+        intent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300);
+        if (!DISCOVERABLE)
+            reqDISCOVERABLE.launch(intent);
+        new Handler().postDelayed(() -> new BluetoothConnectionService().startServer(f, key, file1 -> runOnUiThread(() -> {
+            f = file1;
+            binding.progress.setProgressCompat(100, true);
+            binding.play.setVisibility(View.VISIBLE);
+        })), 1000);
+
+
     }
 
-    private byte[] EncryptFile(String path, String key) throws IOException {
-        File file = new File(path);
-        int size = (int) file.length();
-        byte[] bytes = new byte[size];
-        BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
-        bufferedInputStream.read(bytes, 0, bytes.length);
-        bufferedInputStream.close();
-        return encode(bytes, key);
+    MediaPlayer mediaPlayer;
+
+    private void play(File file) {
+        if (mediaPlayer != null)
+            mediaPlayer.pause();
+        mediaPlayer = MediaPlayer.create(FActivity.this, Uri.fromFile(file));
+        mediaPlayer.start();
     }
 
 
-    private byte[] encode(byte[] data, String key) {
-        try {
-            SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES");
-            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(Cipher.ENCRYPT_MODE, keySpec);
-            return cipher.doFinal(data);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+    private void checkBluetooth() {
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        boolean hasBluetooth = getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH);
+        if (!hasBluetooth) {
+            finish();
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            rqPer.launch(new String[]{android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                    android.Manifest.permission.BLUETOOTH_SCAN,
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH,
+                    android.Manifest.permission.BLUETOOTH_ADMIN,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION});
+        } else {
+            rqPer.launch(new String[]{android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                    android.Manifest.permission.BLUETOOTH,
+                    android.Manifest.permission.BLUETOOTH_ADMIN,
+                    Manifest.permission.ACCESS_FINE_LOCATION});
+
         }
     }
 }
